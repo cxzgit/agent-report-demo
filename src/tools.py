@@ -4,31 +4,8 @@ from typing import Any
 
 from langchain.tools import tool
 
-from .sample_data import LOCAL_KNOWLEDGE_BASE
-
-
-KEYWORD_ALIASES = {
-    "越南": ["vietnam"],
-    "新能源": ["renewable energy", "solar", "wind", "power"],
-    "市场": ["market", "demand", "corporate ppa"],
-    "政策": ["policy", "permits", "compliance"],
-    "合规": ["compliance", "permits", "fdi"],
-    "商业模式": ["investment", "corporate ppa"],
-    "风险": ["risk", "curtailment", "grid"],
-}
-
-
-def _expand_keywords(values: list[str]) -> list[str]:
-    expanded: list[str] = []
-    for value in values:
-        if value and value not in expanded:
-            expanded.append(value)
-        for source, aliases in KEYWORD_ALIASES.items():
-            if source in value:
-                for alias in aliases:
-                    if alias not in expanded:
-                        expanded.append(alias)
-    return expanded
+from .mock_knowledge_base import LOCAL_KNOWLEDGE_BASE
+from .prompts import build_section_prompt
 
 
 def _copy_state(state: dict[str, Any]) -> dict[str, Any]:
@@ -39,12 +16,13 @@ def _copy_state(state: dict[str, Any]) -> dict[str, Any]:
         "search_results": dict(state.get("search_results", {})),
         "references": dict(state.get("references", {})),
         "section_references": dict(state.get("section_references", {})),
+        "section_prompts": dict(state.get("section_prompts", {})),
         "sections": dict(state.get("sections", {})),
         "review_results": dict(state.get("review_results", {})),
         "final_report": state.get("final_report", ""),
     }
 
-
+# 规划章节
 @tool
 def plan_report_tool(state: dict[str, Any]) -> dict[str, Any]:
     """Plan report sections from country and industry."""
@@ -58,23 +36,19 @@ def plan_report_tool(state: dict[str, Any]) -> dict[str, Any]:
     ]
     return next_state
 
-
+# 生成关键词
 @tool
 def generate_keywords_tool(state: dict[str, Any]) -> dict[str, Any]:
     """Generate local-search keywords for every report section."""
     next_state = _copy_state(state)
     req = next_state["request"]
     next_state["keywords"] = {
-        part: _expand_keywords([
-            req["country"].lower(),
-            req["industry"].lower(),
-            part.replace("与", " ").replace("及", " "),
-        ])
+        part: [req["country"], req["industry"], part]
         for part in next_state["parts"]
     }
     return next_state
 
-
+# 搜索
 @tool
 def mock_search_tool(state: dict[str, Any]) -> dict[str, Any]:
     """Search a local mock knowledge base using generated keywords."""
@@ -123,8 +97,24 @@ def build_references_tool(state: dict[str, Any]) -> dict[str, Any]:
 
 
 @tool
+def build_section_prompts_tool(state: dict[str, Any]) -> dict[str, Any]:
+    """Build writing prompts for every report section."""
+    next_state = _copy_state(state)
+    next_state["section_prompts"] = {
+        part: build_section_prompt(
+            request=next_state["request"],
+            part=part,
+            reference_ids=next_state["section_references"].get(part, []),
+            references=next_state["references"],
+        )
+        for part in next_state["parts"]
+    }
+    return next_state
+
+
+@tool
 def write_section_tool(state: dict[str, Any]) -> dict[str, Any]:
-    """Write report sections from references and local evidence."""
+    """Write report sections from prompts, references, and local evidence."""
     next_state = _copy_state(state)
     req = next_state["request"]
     sections: dict[str, str] = {}
@@ -144,7 +134,7 @@ def write_section_tool(state: dict[str, Any]) -> dict[str, Any]:
             f"因此，企业不应只看单点政策利好，而应把需求增长、准入审批、"
             f"合作伙伴执行能力和退出路径放进同一个投资模型中评估。{ref_text}\n\n"
             f"落地上，建议先用轻资产试点验证客户需求和电网接入条件，再根据"
-            f"项目收益率、许可周期和本地运营能力决定是否扩大资本投入。"
+            f"项目收益率、许可周期和本地运营能力决定是否扩大资本投入。\n\n"
         )
 
     next_state["sections"] = sections
@@ -178,19 +168,13 @@ def assemble_report_tool(state: dict[str, Any]) -> dict[str, Any]:
     next_state = _copy_state(state)
     req = next_state["request"]
     sections = "\n\n".join(next_state["sections"].get(part, "") for part in next_state["parts"])
-    review_summary = "\n".join(
-        f"- {part}: {result['notes']}，正文字符 {result['char_count']}，引用 {result['reference_mentions']} 处"
-        for part, result in next_state["review_results"].items()
-    )
     references = "\n".join(
         f"- [{ref_id}] {ref['title']} - {ref['url']}"
         for ref_id, ref in next_state["references"].items()
     )
     next_state["final_report"] = (
         f"# {req['country']}{req['industry']}报告\n\n"
-        f"> Demo 说明：本报告由 LangChain tools 编排生成，数据来自本地 mock 知识库。\n\n"
         f"{sections}\n\n"
-        f"## 质检结果\n\n{review_summary}\n\n"
         f"## 参考资料\n\n{references}\n"
     )
     return next_state
@@ -201,6 +185,7 @@ REPORT_TOOLS = [
     generate_keywords_tool,
     mock_search_tool,
     build_references_tool,
+    build_section_prompts_tool,
     write_section_tool,
     review_section_tool,
     assemble_report_tool,

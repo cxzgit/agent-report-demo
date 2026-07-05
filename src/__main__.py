@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 import sys
 
+from .graph import run_report_graph
 from .models import ReportRequest
-from .orchestrator import ReportAgentOrchestrator
 
 __title__ = "agent-report-demo"
 __version__ = "0.1.0"
@@ -34,8 +34,7 @@ def start_demo() -> None:
     print(f"industry: {request.industry}")
     print()
 
-    orchestrator = ReportAgentOrchestrator()
-    final_state = orchestrator.run(request)
+    final_state = run_report_graph(request)
 
     print("\n=== Final Report ===")
     print(final_state.final_report)

@@ -65,7 +65,7 @@ def mock_search_tool(state: dict[str, Any]) -> dict[str, Any]:
     next_state["search_results"] = search_results
     return next_state
 
-
+# 把搜索出来的资料整理成稳定的引用编号
 @tool
 def build_references_tool(state: dict[str, Any]) -> dict[str, Any]:
     """Convert search results into stable report references."""
@@ -95,7 +95,7 @@ def build_references_tool(state: dict[str, Any]) -> dict[str, Any]:
     next_state["section_references"] = section_references
     return next_state
 
-
+# 为每个章节构建提示词
 @tool
 def build_section_prompts_tool(state: dict[str, Any]) -> dict[str, Any]:
     """Build writing prompts for every report section."""
@@ -111,7 +111,7 @@ def build_section_prompts_tool(state: dict[str, Any]) -> dict[str, Any]:
     }
     return next_state
 
-
+# 写每个章节的正文
 @tool
 def write_section_tool(state: dict[str, Any]) -> dict[str, Any]:
     """Write report sections from prompts, references, and local evidence."""
@@ -140,7 +140,7 @@ def write_section_tool(state: dict[str, Any]) -> dict[str, Any]:
     next_state["sections"] = sections
     return next_state
 
-
+# 检查生成出来的章节内容
 @tool
 def review_section_tool(state: dict[str, Any]) -> dict[str, Any]:
     """Review generated sections for basic quality signals."""
@@ -161,7 +161,7 @@ def review_section_tool(state: dict[str, Any]) -> dict[str, Any]:
     next_state["review_results"] = review_results
     return next_state
 
-
+# 把章节和引用拼接成Markdown格式的报告
 @tool
 def assemble_report_tool(state: dict[str, Any]) -> dict[str, Any]:
     """Assemble final Markdown report from sections and references."""
@@ -178,15 +178,3 @@ def assemble_report_tool(state: dict[str, Any]) -> dict[str, Any]:
         f"## 参考资料\n\n{references}\n"
     )
     return next_state
-
-
-REPORT_TOOLS = [
-    plan_report_tool,
-    generate_keywords_tool,
-    mock_search_tool,
-    build_references_tool,
-    build_section_prompts_tool,
-    write_section_tool,
-    review_section_tool,
-    assemble_report_tool,
-]
